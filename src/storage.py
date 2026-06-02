@@ -76,7 +76,7 @@ class FileStorage(BaseStorage):
 
         path = self._directory / name
         path.write_text(
-            json.dumps(result.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
         print(f"[SAVE] 提取数据已保存: {path}")

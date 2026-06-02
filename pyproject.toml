@@ -1,10 +1,9 @@
 [project]
 name = "arxivcrawler"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "arXiv论文搜索与信息提取工具"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
-    "lxml>=6.1.1",
-    "requests>=2.34.2",
+    "arxiv>=2.1.3",
 ]

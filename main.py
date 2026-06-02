@@ -2,17 +2,15 @@
 """arXiv Crawler — 主入口。
 
 用法：
-    python main.py --keyword "machine learning" --size 50
-    python main.py -k "transformer" -s 100 --no-cache
+    python main.py -k "machine learning" -s 50
+    python main.py -k "transformer" -s 100
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 
-from src.crawler import fetch_search_page
-from src.parser import parse_search_results
+from src.crawler import search
 from src.storage import FileStorage
 from src.models import SearchResult
 
@@ -33,22 +31,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="搜索结果数量（默认: 25）",
     )
     parser.add_argument(
-        "--searchtype",
-        default="all",
-        choices=("all", "title", "abstract", "author", "commentary", "journal"),
-        help="搜索类型（默认: all）",
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="忽略本地缓存，强制从网络获取",
-    )
-    parser.add_argument(
-        "--raw-dir",
-        default=None,
-        help="原始 HTML 存储目录（默认: data/raw/）",
-    )
-    parser.add_argument(
         "--output-dir",
         default=None,
         help="提取结果输出目录（默认: data/extracted/）",
@@ -60,32 +42,23 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    # 1. 爬取
-    html = fetch_search_page(
-        query=args.keyword,
-        size=args.size,
-        searchtype=args.searchtype,
-        raw_dir=args.raw_dir,
-        use_cache=not args.no_cache,
-    )
+    print(f"[SEARCH] 关键词: {args.keyword!r}, 数量: {args.size}")
+    papers = search(query=args.keyword, max_results=args.size)
 
-    # 2. 解析
-    papers = parse_search_results(html, expected_count=args.size)
     result = SearchResult(
         search_params={
             "keyword": args.keyword,
             "size": args.size,
-            "searchtype": args.searchtype,
         },
         papers=papers,
     )
 
-    # 3. 统计 & 保存
     print(f"\n[STATS] 提取结果统计:")
     print(f"   - 论文总数: {len(papers)}")
-    print(f"   - 有标题:   {sum(1 for p in papers if p.title)}")
-    print(f"   - 有摘要:   {sum(1 for p in papers if p.abstract)}")
-    print(f"   - 有链接:   {sum(1 for p in papers if p.link)}")
+    if papers:
+        print(f"   - 示例标题: {papers[0].title[:60]}...")
+        print(f"   - 示例分类: {papers[0].primary_category}")
+        print(f"   - 示例作者: {', '.join(papers[0].authors[:3])}...")
 
     storage = FileStorage(args.output_dir) if args.output_dir else FileStorage()
     storage.save(result)

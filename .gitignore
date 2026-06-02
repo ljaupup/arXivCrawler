@@ -9,10 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-# Generated data — raw HTML caches + extracted JSON output
-data/raw/
+# Generated data — extracted JSON output
 data/extracted/
-
-# Legacy root-level generated files (moved to data/ in v0.2)
-/arXiv_*.html
-/arxiv_papers_*.json

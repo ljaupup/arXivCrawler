@@ -1,86 +1,107 @@
-"""爬取模块 — 从 arXiv 获取搜索结果的原始 HTML。"""
+"""爬取模块 — 通过 arxiv API 获取论文数据。"""
 
 from __future__ import annotations
 
-import os
-from datetime import datetime
-from pathlib import Path
+from typing import Iterator
 
-import requests
+import arxiv
 
-ARXIV_SEARCH_URL = "https://arxiv.org/search/"
-
-# 默认数据目录（项目根目录下的 data/）
-_DEFAULT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RAW_DIR = _DEFAULT_ROOT / "data" / "raw"
+from src.models import Paper
+from src.parser import arxiv_result_to_paper
 
 
-def fetch_search_page(
+# 默认客户端（连接池复用 + 内置退避重试）
+_DEFAULT_CLIENT: arxiv.Client | None = None
+
+
+def _get_client() -> arxiv.Client:
+    """获取全局共享的 API 客户端。"""
+    global _DEFAULT_CLIENT
+    if _DEFAULT_CLIENT is None:
+        _DEFAULT_CLIENT = arxiv.Client(
+            page_size=100,
+            delay_seconds=3.0,
+            num_retries=3,
+        )
+    return _DEFAULT_CLIENT
+
+
+def search(
     query: str,
     *,
-    size: int = 25,
-    searchtype: str = "all",
-    order: str = "-announced_date_first",
-    raw_dir: str | os.PathLike | None = None,
-    use_cache: bool = True,
-) -> str:
-    """获取 arXiv 搜索结果页面的 HTML。
-
-    返回 HTML 字符串。当 use_cache=True 且当日已有缓存文件时，
-    直接读取本地文件，避免重复请求。
+    max_results: int = 25,
+    sort_by: arxiv.SortCriterion = arxiv.SortCriterion.SubmittedDate,
+    client: arxiv.Client | None = None,
+) -> list[Paper]:
+    """按关键词搜索 arXiv，返回论文列表。
 
     Parameters
     ----------
     query : str
-        搜索关键词。
-    size : int
-        搜索结果数量，默认 25。
-    searchtype : str
-        搜索类型，默认 "all"。
-    order : str
-        排序方式，默认 "-announced_date_first"。
-    raw_dir : str | os.PathLike
-        原始 HTML 文件的存储目录。
-    use_cache : bool
-        是否使用本地缓存，默认 True。
+        搜索关键词。支持 arXiv 高级查询语法。
+    max_results : int
+        最大返回数量，默认 25。
+    sort_by : arxiv.SortCriterion
+        排序方式，默认按提交日期降序。
+    client : arxiv.Client | None
+        自定义 API 客户端；为 None 时使用全局默认客户端。
 
     Returns
     -------
-    str
-        HTML 内容。
+    list[Paper]
+        论文列表（按排序顺序）。
     """
-    if raw_dir is None:
-        raw_dir = DEFAULT_RAW_DIR
-    raw_dir = Path(raw_dir)
-    raw_dir.mkdir(parents=True, exist_ok=True)
+    _client = client or _get_client()
 
-    today = datetime.now().strftime("%Y%m%d")
-    html_path = raw_dir / f"arXiv_{today}.html"
+    search_obj = arxiv.Search(
+        query=query,
+        max_results=max_results,
+        sort_by=sort_by,
+        sort_order=arxiv.SortOrder.Descending,
+    )
 
-    # 优先使用当日本地缓存
-    if use_cache and html_path.exists():
-        print(f"[CACHE] 使用当日本地缓存: {html_path}")
-        return html_path.read_text(encoding="utf-8")
+    results: list[Paper] = []
+    for r in _client.results(search_obj):
+        results.append(arxiv_result_to_paper(r))
 
-    # 从网络获取
-    params = {
-        "searchtype": searchtype,
-        "query": query,
-        "abstracts": "show",
-        "size": size,
-        "order": order,
-    }
+    return results
 
-    print(f"[FETCH] 从 arXiv 获取数据 (keyword={query!r}, size={size}) ...")
-    try:
-        resp = requests.get(ARXIV_SEARCH_URL, params=params, timeout=30)
-        resp.raise_for_status()
-        html_content = resp.text
-    except requests.RequestException as e:
-        raise RuntimeError(f"网络请求失败: {e}") from e
 
-    # 保存到本地
-    html_path.write_text(html_content, encoding="utf-8")
-    print(f"[SAVE] 原始 HTML 已保存: {html_path}")
+def search_by_ids(id_list: list[str], *, client: arxiv.Client | None = None) -> dict[str, Paper]:
+    """按 arXiv ID 列表批量查询论文。
 
-    return html_content
+    Parameters
+    ----------
+    id_list : list[str]
+        arXiv 论文 ID 列表 (eg. ``["2606.01843v1", "2606.01050"]``)。
+    client : arxiv.Client | None
+        自定义 API 客户端。
+
+    Returns
+    -------
+    dict[str, Paper]
+        ID → Paper 的映射。
+    """
+    _client = client or _get_client()
+
+    search_obj = arxiv.Search(id_list=id_list)
+    result_map: dict[str, Paper] = {}
+    for r in _client.results(search_obj):
+        paper = arxiv_result_to_paper(r)
+        result_map[r.get_short_id()] = paper
+
+    return result_map
+
+
+def iter_results(
+    query: str,
+    *,
+    max_results: int = 25,
+    client: arxiv.Client | None = None,
+) -> Iterator[Paper]:
+    """惰性迭代搜索结果（节省内存）。"""
+    _client = client or _get_client()
+    search_obj = arxiv.Search(query=query, max_results=max_results)
+
+    for r in _client.results(search_obj):
+        yield arxiv_result_to_paper(r)
