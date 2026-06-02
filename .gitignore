@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Generated data — raw HTML caches + extracted JSON output
+data/raw/
+data/extracted/
+
+# Legacy root-level generated files (moved to data/ in v0.2)
+/arXiv_*.html
+/arxiv_papers_*.json
