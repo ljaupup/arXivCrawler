@@ -2,8 +2,14 @@
 """arXiv Crawler — 主入口。
 
 用法：
+    # JSON 输出（默认）
     python main.py -k "machine learning" -s 50
-    python main.py -k "transformer" -s 100
+
+    # 写入 PostgreSQL（需先启动 docker 中的数据库）
+    python main.py -k "transformer" -s 100 --db
+
+    # 指定自定义数据库连接
+    python main.py -k "nlp" -s 30 --db "postgresql://user:pass@host:5432/db"
 """
 
 from __future__ import annotations
@@ -11,8 +17,8 @@ from __future__ import annotations
 import argparse
 
 from src.crawler import search
-from src.storage import FileStorage
 from src.models import SearchResult
+from src.storage import FileStorage, use_postgres
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +40,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default=None,
         help="提取结果输出目录（默认: data/extracted/）",
+    )
+    parser.add_argument(
+        "--db",
+        nargs="?",
+        const="postgresql://crawler:crawler_pass@localhost:5432/arxiv_crawler",
+        default=None,
+        metavar="CONNECTION_STRING",
+        help="写入 PostgreSQL（默认连接 docker-compose 中的 postgres）",
     )
     return parser
 
@@ -60,9 +74,12 @@ def main() -> None:
         print(f"   - 示例分类: {papers[0].primary_category}")
         print(f"   - 示例作者: {', '.join(papers[0].authors[:3])}...")
 
-    storage = FileStorage(args.output_dir) if args.output_dir else FileStorage()
-    storage.save(result)
+    if args.db:
+        storage = use_postgres(args.db)
+    else:
+        storage = FileStorage(args.output_dir) if args.output_dir else FileStorage()
 
+    storage.save(result)
     print("[DONE] 完成。")
 
 

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: arxivcrawler-postgres
+    environment:
+      POSTGRES_DB: arxiv_crawler
+      POSTGRES_USER: crawler
+      POSTGRES_PASSWORD: crawler_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

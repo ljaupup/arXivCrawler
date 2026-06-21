@@ -11,3 +11,6 @@ wheels/
 
 # Generated data — extracted JSON output
 data/extracted/
+
+# Docker volume data (PostgreSQL 持久化)
+pgdata/
